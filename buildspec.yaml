@@ -1,13 +1,29 @@
 version: 0.2
 env:
   variables:
-    region: "us-west-2"
+    templateFile: "./template.yaml"
+    stackName: "YOUR-RESOURCE-STACK-NAME"
+    region: "YOUR-REGION"
+    s3Bucket: "YOUR-ARTIFACTS-S3-BUCKET"
+    outputTemplate: "./template-out.yaml"
+    parametersFile: "./params.json"
+    stackTagsFile: "./stack_tags.json"
 
 phases:
     build:
         commands:
-            - aws codepipeline update-pipeline --cli-input-json file://modify_main_pipeline.json
+            - aws cloudformation package --template-file ${templateFile} --s3-bucket ${s3Bucket} --output-template-file ${outputTemplate} --region ${region}
     post_build:
         commands:
-            - echo "Start pipeline ..."
-            - aws codepipeline start-pipeline-execution --name AutomatePipelines-Stack-Pipeline
+            - echo "Start build..."
+            - aws cloudformation deploy --template-file ${outputTemplate} --parameter-overrides file://${parametersFile} --stack-name ${stackName} --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND --tags Name=${stackName}
+            - sleep 15
+            - |
+              if aws cloudformation describe-stacks --stack-name ${stackName} &>/dev/null; then
+              echo "Stack exists ..."
+              aws cloudformation describe-stack-resources --stack-name ${stackName} | jq -r '.StackResources | .[] | "\(.ResourceType)=\(.ResourceStatus)"'
+              aws codepipeline update-pipeline --cli-input-json file://pipeline.json
+
+              else
+              echo "Stack doesn't exist ..."
+              aws codepipeline update-pipeline --cli-input-json file://pipeline.json
