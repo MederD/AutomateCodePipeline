@@ -20,9 +20,9 @@
                         },
                         "runOrder": 1,
                         "configuration": {
-                            "BranchName": "YOUR-BRANCH-FOR-NEW-PIPELINE-HERE",
+                            "BranchName": "main",
                             "ConnectionArn": "YOUR-CONNECTION-ARN-HERE",
-                            "FullRepositoryId": "YOUR-REPO-HERE"
+                            "FullRepositoryId": "AutomateCodePipeline"
                         },
                         "outputArtifacts": [
                             {
