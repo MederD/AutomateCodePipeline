@@ -1,0 +1,67 @@
+{
+    "pipeline": {
+        "name": "AutomatePipelines-Stack-Pipeline",
+        "roleArn": "YOUR-ROLE-HERE",
+        "artifactStore": {
+            "type": "S3",
+            "location": "YOUR-S3-BUCKET-HERE"
+        },
+        "stages": [
+            {
+                "name": "Source",
+                "actions": [
+                    {
+                        "name": "Source",
+                        "actionTypeId": {
+                            "category": "Source",
+                            "owner": "AWS",
+                            "provider": "CodeStarSourceConnection",
+                            "version": "1"
+                        },
+                        "runOrder": 1,
+                        "configuration": {
+                            "BranchName": "YOUR-BRANCH-FOR-NEW-PIPELINE-HERE",
+                            "ConnectionArn": "YOUR-CONNECTION-ARN-HERE",
+                            "FullRepositoryId": "YOUR-REPO-HERE"
+                        },
+                        "outputArtifacts": [
+                            {
+                                "name": "SourceArtifact"
+                            }
+                        ],
+                        "inputArtifacts": []
+                    }
+                ]
+            },
+            {
+                "name": "Build",
+                "actions": [
+                    {
+                        "name": "Build",
+                        "actionTypeId": {
+                            "category": "Build",
+                            "owner": "AWS",
+                            "provider": "CodeBuild",
+                            "version": "1"
+                        },
+                        "runOrder": 1,
+                        "configuration": {
+                            "ProjectName": "AutomatePipelines-Stack-BuildProject"
+                        },
+                        "outputArtifacts": [
+                            {
+                                "name": "BuildArtifact"
+                            }
+                        ],
+                        "inputArtifacts": [
+                            {
+                                "name": "SourceArtifact"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "version": 1
+    }
+}
