@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This stack will create YOUR-RESOURCE-STACK
+
+Parameters:
+  buildSpec:
+    Type: String
+    Description: 'Specify Buildspec File (Ex: buildspec.yaml)'
+  gitBranch:
+    Type: String
+    Description: Remote branch name
+  gitRepo:
+    Type: String
+    Description: FullRepositoryId (Ex: in this format <username>/<repo>)
+  codeBuildRole:
+    Type: String
+    Description: Arn of existing CodeBuild Service Role, NONE to create new
+  codePipelineRole:
+    Type: String
+    Description: Arn of existing CodePipeline Service Role, NONE to create new
+  computeType:
+    Type: String
+    Description: 'Compute type of build project'
+  image:
+    Type: String
+    Description: 'Image of the build project'
+  oSType:
+    Type: String
+    Description: 'Environment type of build project'
+
+Conditions: 
+  CreateNewBuildRole: !Equals [ !Ref codeBuildRole, NONE]
+  CreateNewPipelineRole: !Equals [ !Ref codePipelineRole, NONE]
+
+Resources:
+  CodePipelineServiceRole:
+    Condition: CreateNewPipelineRole
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: 
+        - Key: 'Name'
+          Value: 'CodePipelineServiceRole'
+      RoleName: 'CodePipelineServiceRole'
+      Policies:
+      - PolicyName: Inline_Policy
+        PolicyDocument: '{{resolve:ssm:codepipeline_policy}}'
+      AssumeRolePolicyDocument: |
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "codepipeline.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }
+      Path: /
+      ManagedPolicyArns:
+        - YOU-CAN-ADD-HERE-ANY-AWS-MANAGED-POLICY
+
+  CodeBuildServiceRole:
+    Condition: CreateNewBuildRole
+    Type: AWS::IAM::Role
+    Properties:
+      Tags: 
+        - Key: 'Name'
+          Value: 'CodeBuildServiceRole'
+      RoleName: 'CodeBuildServiceRole'
+      Policies:
+      - PolicyName: Inline_Policy
+        PolicyDocument: '{{resolve:ssm:codebuild_policy}}'
+      AssumeRolePolicyDocument: |
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "codebuild.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }
+      Path: /
+      ManagedPolicyArns:
+        - YOU-CAN-ADD-HERE-ANY-AWS-MANAGED-POLICY
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: 
+        Fn::Join:
+          - '-'
+          - 
+            - !Sub ${AWS::StackName}
+            - BuildProject
+      Artifacts: 
+        Type: CODEPIPELINE
+      Description: This CodeBuild project is for YOUR-RESOURCE-STACK
+      Environment: 
+        Type: !Ref oSType
+        ComputeType: !Ref computeType
+        Image: !Ref image
+        PrivilegedMode: false
+      ServiceRole: !If [ CreateNewBuildRole, !GetAtt CodeBuildServiceRole.Arn, !Ref codeBuildRole ]
+      Source: 
+        BuildSpec: !Ref buildSpec
+        Type: CODEPIPELINE
+        GitCloneDepth: 1
+      TimeoutInMinutes: 10
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: 
+        Fn::Join:
+          - '-'
+          - 
+            - !Sub ${AWS::StackName}
+            - Pipeline
+      ArtifactStore:
+        Type: S3
+        Location:
+          Ref: artifactStoreBucket
+      RoleArn: !If [ CreateNewPipelineRole, !GetAtt CodePipelineServiceRole.Arn, !Ref codePipelineRole ]
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: !Ref codestarConnection
+                FullRepositoryId: !Ref gitRepo
+                BranchName: !Ref gitBranch
+              OutputArtifacts:
+                - Name: SourceArtifact
+              RunOrder: '1'
+              Namespace: SourceVariables 
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+                EnvironmentVariables: 
+                  '[{"name":"BranchName","value":"SourceVariables.BranchName","type":"PLAINTEXT"}]'
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildArtifact
+              RunOrder: '1'
