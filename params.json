@@ -1,0 +1,26 @@
+[
+	{
+		"ParameterKey": "buildSpec",
+		"ParameterValue": "buildspec.yaml"
+	},
+	{
+		"ParameterKey": "gitBranch",
+		"ParameterValue": "BRANCH-OF-YOUR-RESOURCE-HERE"
+	},
+	{
+		"ParameterKey": "gitRepo",
+		"ParameterValue": "REPO-OF-YOUR-RESOURCE-HERE"
+	},
+	{
+		"ParameterKey": "computeType",
+		"ParameterValue": "BUILD_GENERAL1_SMALL"
+	},
+	{
+		"ParameterKey": "image",
+		"ParameterValue": "aws/codebuild/standard:6.0"
+	},
+	{
+		"ParameterKey": "oSType",
+		"ParameterValue": "LINUX_CONTAINER"
+	}
+]
