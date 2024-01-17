@@ -1,0 +1,13 @@
+version: 0.2
+env:
+  variables:
+    region: "us-west-2"
+
+phases:
+    build:
+        commands:
+            - aws codepipeline update-pipeline --cli-input-json file://modify_main_pipeline.json
+    post_build:
+        commands:
+            - echo "Start pipeline ..."
+            - aws codepipeline start-pipeline-execution --name AutomatePipelines-Stack-Pipeline
