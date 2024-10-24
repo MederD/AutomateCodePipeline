@@ -1,0 +1,59 @@
+version: 0.2
+env:
+  variables:
+    REGION: SOME-AWS-REGION
+    IMAGE_REPO_SITE: SOME-IMAGE-REPO-SITE
+    IMAGE_REPO_NAME: SOME-IMAGE-REPO-NAME
+    FUNCTION_NAME: SOME-FUNCTION-NAME
+
+phases:
+  install:
+    commands:
+      - echo "in the install phase"
+      - apt-get update && apt-get -y install jq --upgrade awscli
+      - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      - curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+  pre_build:
+        commands:
+            - echo Logging in to Amazon ECR...
+            - aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${IMAGE_REPO_SITE}
+
+  build:
+    commands:
+      - echo "inside build stage"
+      - cd $CODEBUILD_SRC_DIR
+      - docker build -t ${IMAGE_REPO_SITE}/${IMAGE_REPO_NAME}:${CODEBUILD_RESOLVED_SOURCE_VERSION} .
+      - syft ${IMAGE_REPO_SITE}/${IMAGE_REPO_NAME}:${CODEBUILD_RESOLVED_SOURCE_VERSION} -o json | grype -o json > scan-report.json
+  
+  post_build:
+    commands:
+      - |
+        # -------------- Create the payload for Lambda to send it to Slack
+        jq "{ \"messageType\": \"CodeScanReport\", \"reportType\": \"GRYPE\", \
+        \"createdAt\": \"$(date +\"%Y-%m-%dT%H:%M:%S.%3NZ\")\", \ 
+        \"source_repository\": \"${CODEBUILD_SOURCE_REPO_URL}\", \
+        \"source_branch\": \"${CODEBUILD_SOURCE_VERSION}\", \
+        \"build_id\": \"${CODEBUILD_BUILD_ID}\", \
+        \"source_commitid\": \"${CODEBUILD_RESOLVED_SOURCE_VERSION}\", \
+        \"report\": . }" scan-report.json > payload.json
+
+      - echo ""
+
+      - |       
+        # -------------- Handle the scan report and (TODO: push only if conditions are met)
+        if (grep -i -E 'High|Critical' payload.json); then 
+          echo "There are critical or high vulnerabilities.. failing the build"
+          aws lambda invoke --function-name ${FUNCTION_NAME} --payload file://payload.json lambda-output.json && echo "LAMBDA_SUCCEEDED" || echo "LAMBDA_FAILED";
+          # exit 1;
+        else
+          echo "Medium or lower vulnerabilities found. Proceeding to push the image."
+        fi
+      
+      # -------------- For now push to docker either way, later we should push to if there's no "critical"|"high" vulnerabilities.
+      - docker push ${IMAGE_REPO_SITE}/${IMAGE_REPO_NAME}:${CODEBUILD_RESOLVED_SOURCE_VERSION}
+
+artifacts:
+  files:
+    - payload.json
+  name: builds/$CODEBUILD_BUILD_NUMBER/payload.json
